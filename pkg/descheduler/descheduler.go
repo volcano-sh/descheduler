@@ -30,7 +30,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	frameworkprofile "volcano.sh/descheduler/pkg/framework/profile"
 
 	"github.com/robfig/cron/v3"
 	v1 "k8s.io/api/core/v1"
@@ -60,6 +59,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/version"
 
 	"volcano.sh/descheduler/cmd/descheduler/app/options"
+	"volcano.sh/descheduler/pkg/framework/plugins/loadaware"
+	frameworkprofile "volcano.sh/descheduler/pkg/framework/profile"
 )
 
 const podNameEnvKey string = "HOSTNAME"
@@ -277,6 +278,19 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			return
 		}
 		klog.V(5).InfoS("Successfully load descheduler policy", "deschedulerPolicy", string(deschedulerPolicyJson))
+
+		//add LoadAware plugin for PreEvictionFilter extension point
+		//When configuring the Loadaware plugin, users can implement the PreEvictionFilter extension point by default,
+		//which allows consideration of the actual node utilization during eviction.
+		for index, profile := range deschedulerPolicy.Profiles {
+			for _, balancePlugin := range profile.Plugins.Balance.Enabled {
+				if balancePlugin == loadaware.LoadAwareUtilizationPluginName {
+					deschedulerPolicy.Profiles[index].Plugins.PreEvictionFilter.Enabled =
+						append(deschedulerPolicy.Profiles[index].Plugins.PreEvictionFilter.Enabled, loadaware.LoadAwareUtilizationPluginName)
+					break
+				}
+			}
+		}
 
 		loopStartDuration := time.Now()
 		defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
