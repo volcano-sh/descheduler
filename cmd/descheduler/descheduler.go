@@ -12,6 +12,11 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+Copyright 2024 The Volcano Authors.
+
+Modifications made by Volcano authors:
+- [2024]Register LoadAwareUtilizationPluginName plugin
 */
 
 package main
@@ -20,12 +25,12 @@ import (
 	"os"
 
 	"k8s.io/component-base/cli"
-	"sigs.k8s.io/descheduler/cmd/descheduler/app"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
+
+	"volcano.sh/descheduler/cmd/descheduler/app"
 )
 
 func init() {
-	app.SetupLogs()
 	descheduler.SetupPlugins()
 }
 

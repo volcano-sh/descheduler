@@ -12,21 +12,27 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+Copyright 2024 The Volcano Authors.
+
+Modifications made by Volcano authors:
+- [2024]Support crontab expression running descheduler
 */
 
 package descheduler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	componentbaseconfig "k8s.io/component-base/config"
-	"k8s.io/klog/v2"
-
+	"github.com/robfig/cron/v3"
+	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -38,8 +44,9 @@ import (
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	schedulingv1 "k8s.io/client-go/listers/scheduling/v1"
 	core "k8s.io/client-go/testing"
-
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	"k8s.io/client-go/tools/events"
+	componentbaseconfig "k8s.io/component-base/config"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
@@ -48,10 +55,15 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
-	frameworkprofile "sigs.k8s.io/descheduler/pkg/framework/profile"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/pkg/version"
+
+	"volcano.sh/descheduler/cmd/descheduler/app/options"
+	frameworkprofile "volcano.sh/descheduler/pkg/framework/profile"
 )
+
+const podNameEnvKey string = "HOSTNAME"
+const podNamespaceEnvKey string = "POD_NAMESPACE"
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	metrics.Register()
@@ -60,6 +72,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	if rs.KubeconfigFile != "" && clientConnection.Kubeconfig == "" {
 		clientConnection.Kubeconfig = rs.KubeconfigFile
 	}
+
 	rsclient, eventClient, err := createClients(clientConnection)
 	if err != nil {
 		return err
@@ -74,6 +87,11 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	if deschedulerPolicy == nil {
 		return fmt.Errorf("deschedulerPolicy is nil")
 	}
+	deschedulerPolicyJson, err := json.MarshalIndent(deschedulerPolicy, "", "  ")
+	if err != nil {
+		return fmt.Errorf("faild to marshal deschedulerPolicy: %v", err)
+	}
+	klog.V(5).InfoS("Successfully load descheduler policy", "deschedulerPolicy", string(deschedulerPolicyJson))
 
 	// Add k8s compatibility warnings to logs
 	versionCompatibilityCheck(rs)
@@ -87,8 +105,14 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 		return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion)
 	}
 
-	if rs.LeaderElection.LeaderElect && rs.DeschedulingInterval.Seconds() == 0 {
-		return fmt.Errorf("leaderElection must be used with deschedulingInterval")
+	if rs.DeschedulingInterval.Seconds() == 0 {
+		_, err = cron.ParseStandard(rs.DeschedulingIntervalCronExpression)
+		if rs.DeschedulingIntervalCronExpression == "" || err != nil {
+			return fmt.Errorf("Both DeschedulingInterval and deschedulingIntervalCronExpression are not configured. At least one of these two parameter must be configured. ")
+		}
+		klog.V(1).InfoS("Run with deschedulingIntervalCronExpression", "intervalCronExpression", rs.DeschedulingIntervalCronExpression)
+	} else {
+		klog.V(1).InfoS("Run with deschedulingInterval", "interval", rs.DeschedulingInterval)
 	}
 
 	if rs.LeaderElection.LeaderElect && rs.DryRun {
@@ -239,8 +263,21 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	defer eventBroadcaster.Shutdown()
 
 	cycleSharedInformerFactory := sharedInformerFactory
+	run := func() {
+		deschedulerPolicy, err = LoadPolicyConfig(rs.PolicyConfigFile, rs.Client, pluginregistry.PluginRegistry)
+		if err != nil || deschedulerPolicy == nil {
+			klog.ErrorS(err, "Failed to load policy config")
+			eventDeschedulerParamErr(rs.Client, eventRecorder, err)
+			return
+		}
 
-	wait.NonSlidingUntil(func() {
+		deschedulerPolicyJson, err := json.MarshalIndent(deschedulerPolicy, "", "  ")
+		if err != nil {
+			klog.ErrorS(err, "Failed to marshal descheduler policy")
+			return
+		}
+		klog.V(5).InfoS("Successfully load descheduler policy", "deschedulerPolicy", string(deschedulerPolicyJson))
+
 		loopStartDuration := time.Now()
 		defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
@@ -330,13 +367,14 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		}
 
 		klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
-
-		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
-		if rs.DeschedulingInterval.Seconds() == 0 {
-			cancel()
-		}
-	}, rs.DeschedulingInterval, ctx.Done())
-
+	}
+	if rs.DeschedulingInterval.Seconds() != 0 {
+		wait.NonSlidingUntil(run, rs.DeschedulingInterval, ctx.Done())
+	} else {
+		c := cron.New()
+		c.AddFunc(rs.DeschedulingIntervalCronExpression, run)
+		c.Run()
+	}
 	return nil
 }
 
@@ -361,4 +399,15 @@ func createClients(clientConnection componentbaseconfig.ClientConnectionConfigur
 	}
 
 	return kClient, eventClient, nil
+}
+
+func eventDeschedulerParamErr(client clientset.Interface, eventRecorder events.EventRecorder, errParam error) {
+	podName := os.Getenv(podNameEnvKey)
+	podNamespace := os.Getenv(podNamespaceEnvKey)
+	pod, err := client.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
+	if err != nil {
+		klog.Errorf("Want to event error %v,but get pod error %v", errParam, err)
+		return
+	}
+	eventRecorder.Eventf(pod, nil, v1.EventTypeWarning, "Load Config Error", "Warning", "descheduler run err due to parameter error:%v", errParam)
 }

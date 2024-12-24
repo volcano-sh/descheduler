@@ -12,6 +12,11 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+Copyright 2024 The Volcano Authors.
+
+Modifications made by Volcano authors:
+- [2024]Add `DeschedulingIntervalCronExpression` config
 */
 
 package componentconfig
@@ -31,6 +36,9 @@ type DeschedulerConfiguration struct {
 
 	// Time interval for descheduler to run
 	DeschedulingInterval time.Duration
+
+	// cron expression for run descheduler
+	DeschedulingIntervalCronExpression string
 
 	// KubeconfigFile is path to kubeconfig file with authorization and master
 	// location information.

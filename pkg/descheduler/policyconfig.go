@@ -21,9 +21,8 @@ import (
 	"fmt"
 	"os"
 
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 

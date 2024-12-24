@@ -9,6 +9,11 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+Copyright 2024 The Volcano Authors.
+
+Modifications made by Volcano authors:
+- [2024]Abstract evictor as an interface
 */
 
 package profile
@@ -33,6 +38,8 @@ import (
 
 	"k8s.io/klog/v2"
 )
+
+const DefaultEvictor string = "default"
 
 // evictorImpl implements the Evictor interface so plugins
 // can evict a pod without importing a specific pod evictor
@@ -102,10 +109,15 @@ type preEvictionFilterPlugin interface {
 	frameworktypes.Plugin
 	PreEvictionFilter(pod *v1.Pod) bool
 }
-
+type Evictor interface {
+	NodeEvicted(node *v1.Node) uint
+	TotalEvicted() uint
+	NodeLimitExceeded(node *v1.Node) bool
+	EvictPod(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) bool
+}
 type profileImpl struct {
 	profileName string
-	podEvictor  *evictions.PodEvictor
+	podEvictor  Evictor
 
 	deschedulePlugins        []frameworktypes.DeschedulePlugin
 	balancePlugins           []frameworktypes.BalancePlugin
@@ -220,7 +232,6 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 	if hOpts.podEvictor == nil {
 		return nil, fmt.Errorf("podEvictor missing")
 	}
-
 	pi := &profileImpl{
 		profileName:              config.Name,
 		podEvictor:               hOpts.podEvictor,

@@ -12,6 +12,11 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+Copyright 2024 The Volcano Authors.
+
+Modifications made by Volcano authors:
+- [2024]Rename package name to volcano.sh
 */
 
 // Package app implements a Server object for running the descheduler.
@@ -24,14 +29,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"k8s.io/apiserver/pkg/server/healthz"
-
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
-	"sigs.k8s.io/descheduler/pkg/descheduler"
-
 	"github.com/spf13/cobra"
-
 	apiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/apiserver/pkg/server/mux"
 	restclient "k8s.io/client-go/rest"
 	registry "k8s.io/component-base/logs/api/v1"
@@ -39,6 +39,9 @@ import (
 	_ "k8s.io/component-base/logs/json/register"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog/v2"
+
+	"volcano.sh/descheduler/cmd/descheduler/app/options"
+	"volcano.sh/descheduler/pkg/descheduler"
 )
 
 // NewDeschedulerCommand creates a *cobra.Command object with default parameters
@@ -53,8 +56,6 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 		Short: "descheduler",
 		Long:  `The descheduler evicts pods which may be bound to less desired nodes`,
 		Run: func(cmd *cobra.Command, args []string) {
-			// s.Logs.Config.Format = s.Logging.Format
-
 			// LoopbackClientConfig is a config for a privileged loopback connection
 			var LoopbackClientConfig *restclient.Config
 			var SecureServing *apiserver.SecureServingInfo

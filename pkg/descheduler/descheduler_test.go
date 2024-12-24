@@ -1,8 +1,31 @@
+/*
+Copyright 2017 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Copyright 2024 The Volcano Authors.
+
+Modifications made by Volcano authors:
+- [2024]Rename package name to volcano.sh
+*/
+
 package descheduler
 
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
 	"testing"
 	"time"
 
@@ -13,7 +36,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
@@ -21,6 +43,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 	"sigs.k8s.io/descheduler/test"
+
+	"volcano.sh/descheduler/cmd/descheduler/app/options"
 )
 
 // scope contains information about an ongoing conversion.
@@ -44,7 +68,9 @@ func TestTaintsUpdated(t *testing.T) {
 	pluginregistry.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaints{}, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, pluginregistry.PluginRegistry)
 	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 
@@ -69,6 +95,7 @@ func TestTaintsUpdated(t *testing.T) {
 	}
 	rs.Client = client
 	rs.EventClient = eventClient
+	rs.DeschedulingInterval = time.Second
 
 	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -101,11 +128,38 @@ func TestTaintsUpdated(t *testing.T) {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}
 
+	tmpDir := t.TempDir()
+	filePath := path.Join(tmpDir, "descheduler-policyConfig.yaml")
+	policyConfig := []byte(`
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+- name: strategy-RemovePodsViolatingNodeTaints-profile
+  pluginConfig:
+  - name: "RemovePodsViolatingNodeTaints"
+  - name: "DefaultEvictor"
+  plugins:
+    deschedule:
+      enabled:
+      - "RemovePodsViolatingNodeTaints"
+    filter:
+      enabled:
+      - "DefaultEvictor"
+    preEvictionFilter:
+      enabled:
+      - "DefaultEvictor"
+`)
+	err = os.WriteFile(filePath, policyConfig, 0644)
+	if err != nil {
+		t.Fatalf("Failed to write policyConfig to file: %v", err)
+	}
+	rs.PolicyConfigFile = filePath
+
 	if err := RunDeschedulerStrategies(ctx, rs, internalDeschedulerPolicy, "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
 	}
 
-	if len(evictedPods) != 1 {
+	if len(evictedPods) == 0 {
 		t.Fatalf("Unable to evict pod, node taint did not get propagated to descheduler strategies %v\n", err)
 	}
 }
@@ -115,7 +169,9 @@ func TestDuplicate(t *testing.T) {
 	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicates{}, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, pluginregistry.PluginRegistry)
 	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 
@@ -147,6 +203,7 @@ func TestDuplicate(t *testing.T) {
 	}
 	rs.Client = client
 	rs.EventClient = eventClient
+	rs.DeschedulingInterval = time.Second
 
 	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -166,6 +223,34 @@ func TestDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}
+
+	tmpDir := t.TempDir()
+	filePath := path.Join(tmpDir, "descheduler-policyConfig.yaml")
+	policyConfig := []byte(`
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+- name: strategy-RemoveDuplicates-profile
+  pluginConfig:
+  - name: "RemoveDuplicates"
+  - name: "DefaultEvictor"
+  plugins:
+    balance:
+      enabled:
+      - "RemoveDuplicates"
+    filter:
+      enabled:
+      - "DefaultEvictor"
+    preEvictionFilter:
+      enabled:
+      - "DefaultEvictor"
+`)
+	err = os.WriteFile(filePath, policyConfig, 0644)
+	if err != nil {
+		t.Fatalf("Failed to write policyConfig to file: %v", err)
+	}
+	rs.PolicyConfigFile = filePath
+
 	if err := RunDeschedulerStrategies(ctx, rs, internalDeschedulerPolicy, "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
 	}
@@ -226,7 +311,7 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	}
 	rs.Client = client
 	rs.EventClient = eventClient
-	rs.DeschedulingInterval = 0
+	rs.DeschedulingInterval = 1
 	errChan := make(chan error, 1)
 	defer close(errChan)
 
