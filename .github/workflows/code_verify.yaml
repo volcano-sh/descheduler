@@ -34,6 +34,6 @@ jobs:
       - name: Run verify test
         run: |
           make verify
-          make all
+          make image
           sudo make unit-test
         working-directory: ./src/github.com/${{ github.repository }}

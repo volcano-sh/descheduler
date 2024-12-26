@@ -1,0 +1,139 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volcano-descheduler
+  namespace: volcano-system
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: volcano-descheduler
+  namespace: volcano-system
+data:
+  policy.yaml: |
+    apiVersion: "descheduler/v1alpha2"
+    kind: "DeschedulerPolicy"
+    profiles:
+    - name: default
+      pluginConfig:
+      - args:
+          ignorePvcPods: true
+          nodeFit: true
+          priorityThreshold:
+            value: 10000
+        name: DefaultEvictor
+      - args:
+          evictableNamespaces:
+            exclude:
+            - kube-system
+          metrics:
+            address: null
+            type: null
+          targetThresholds:
+            cpu: 80
+            memory: 85
+          thresholds:
+            cpu: 30
+            memory: 30
+        name: LoadAware
+      plugins:
+        balance:
+          enabled:
+          - LoadAware
+
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: volcano-descheduler
+rules:
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "watch", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: volcano-descheduler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: volcano-descheduler
+subjects:
+  - kind: ServiceAccount
+    name: volcano-descheduler
+    namespace: volcano-system
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: volcano-descheduler
+  namespace: volcano-system
+  labels:
+    app: descheduler
+    k8s-app: descheduler
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: descheduler
+      k8s-app: descheduler
+  template:
+    metadata:
+      labels:
+        app: descheduler
+        k8s-app: descheduler
+    spec:
+      serviceAccountName: volcano-descheduler
+      volumes:
+        - name: policy-volume
+          configMap:
+            name: volcano-descheduler
+        - name: log
+          hostPath:
+            path: /var/log/volcano/descheduler
+      containers:
+        - name: descheduler
+          image: docker.io/volcanosh/vc-descheduler:latest
+          command: ["sh", "-c"]
+          args:
+          - >
+           /vc-descheduler --descheduling-interval-cron-expression='*/10 * * * *'
+           --descheduling-interval=10m
+           --policy-config-file=/policy-dir/policy.yaml
+           --leader-elect=false
+           --leader-elect-resource-namespace=volcano-system
+           --v=3 1>>/var/log/volcano/descheduler/descheduler.log 2>&1
+          imagePullPolicy: Always
+          env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          volumeMounts:
+            - mountPath: /policy-dir
+              name: policy-volume
+            - name: log
+              mountPath: /var/log/volcano/descheduler
