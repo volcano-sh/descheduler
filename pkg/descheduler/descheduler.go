@@ -17,6 +17,7 @@ Copyright 2024 The Volcano Authors.
 
 Modifications made by Volcano authors:
 - [2024]Support crontab expression running descheduler
+- [2024]add LoadAware plugin for PreEvictionFilter extension point
 */
 
 package descheduler
@@ -59,6 +60,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/version"
 
 	"volcano.sh/descheduler/cmd/descheduler/app/options"
+	"volcano.sh/descheduler/pkg/framework/plugins/loadaware"
 	frameworkprofile "volcano.sh/descheduler/pkg/framework/profile"
 )
 
@@ -277,6 +279,19 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			return
 		}
 		klog.V(5).InfoS("Successfully load descheduler policy", "deschedulerPolicy", string(deschedulerPolicyJson))
+
+		//add LoadAware plugin for PreEvictionFilter extension point
+		//When configuring the Loadaware plugin, users can implement the PreEvictionFilter extension point by default,
+		//which allows consideration of the actual node utilization during eviction.
+		for index, profile := range deschedulerPolicy.Profiles {
+			for _, balancePlugin := range profile.Plugins.Balance.Enabled {
+				if balancePlugin == loadaware.LoadAwareUtilizationPluginName {
+					deschedulerPolicy.Profiles[index].Plugins.PreEvictionFilter.Enabled =
+						append(deschedulerPolicy.Profiles[index].Plugins.PreEvictionFilter.Enabled, loadaware.LoadAwareUtilizationPluginName)
+					break
+				}
+			}
+		}
 
 		loopStartDuration := time.Now()
 		defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
