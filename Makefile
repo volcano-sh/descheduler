@@ -54,7 +54,7 @@ else
 GOARCH?=$(OSARCH)
 endif
 
-# Run `make images DOCKER_PLATFORMS="linux/amd64,linux/arm64" BUILDX_OUTPUT_TYPE=registry IMAGE_PREFIX=[yourregistry]` to push multi-platform
+# Run `make image DOCKER_PLATFORMS="linux/amd64,linux/arm64" BUILDX_OUTPUT_TYPE=registry IMAGE_PREFIX=[yourregistry]` to push multi-platform
 DOCKER_PLATFORMS ?= "linux/${GOARCH}"
 
 GOOS ?= linux
@@ -74,7 +74,7 @@ vc-descheduler: init
 
 image_bins: vc-descheduler
 
-images:
+image:
 	for name in descheduler; do\
 		docker buildx build -t "${IMAGE_PREFIX}/vc-$$name:$(TAG)" . -f ./installer/dockerfile/$$name/Dockerfile --output=type=${BUILDX_OUTPUT_TYPE} --platform ${DOCKER_PLATFORMS} --build-arg APK_MIRROR=${APK_MIRROR} --build-arg OPEN_EULER_IMAGE_TAG=${OPEN_EULER_IMAGE_TAG}; \
 	done
