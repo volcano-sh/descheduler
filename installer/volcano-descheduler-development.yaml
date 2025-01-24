@@ -116,7 +116,7 @@ spec:
             path: /var/log/volcano/descheduler
       containers:
         - name: descheduler
-          image: docker.io/volcanosh/vc-descheduler:latest
+          image: docker.io/volcanosh/vc-descheduler:v0.1.0
           command: ["sh", "-c"]
           args:
           - >

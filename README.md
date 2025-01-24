@@ -71,7 +71,7 @@ scrape_configs:
 # create ns first.
 kubectl create ns volcano-system
 # deploy descheduler yaml.
-kubectl apply -f https://raw.githubusercontent.com/volcano-sh/descheduler/main/installer/volcano-descheduler-development.yaml
+kubectl apply -f https://raw.githubusercontent.com/volcano-sh/descheduler/release-0.1/installer/volcano-descheduler-development.yaml
 ```
 
 ## Configurations
