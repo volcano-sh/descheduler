@@ -29,12 +29,14 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 
 	"volcano.sh/descheduler/cmd/descheduler/app"
+	"volcano.sh/descheduler/pkg/framework/plugins/defragmentation"
 	"volcano.sh/descheduler/pkg/framework/plugins/loadaware"
 )
 
 func init() {
 	descheduler.SetupPlugins()
 	pluginregistry.Register(loadaware.LoadAwareUtilizationPluginName, loadaware.NewLoadAwareUtilization, &loadaware.LoadAwareUtilization{}, &loadaware.LoadAwareUtilizationArgs{}, loadaware.ValidateLoadAwareUtilizationArgs, loadaware.SetDefaults_LoadAwareUtilizationArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(defragmentation.DefragmentationPluginName, defragmentation.NewDefragmentation, &defragmentation.Defragmentation{}, &defragmentation.DefragmentationArgs{}, defragmentation.ValidateDefragmentationArgs, defragmentation.SetDefaults_DefragmentationArgs, pluginregistry.PluginRegistry)
 }
 
 func main() {

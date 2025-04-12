@@ -37,10 +37,34 @@ data:
             cpu: 30
             memory: 30
         name: LoadAware
+      - args:
+          evictableNamespaces:
+            exclude:
+              - kube-system
+          lowThresholds:
+            cpu: 30
+            memory: 30
+            nvidia.com/gpu: 30
+          fragmentThresholds:
+            cpu: 70
+            memory: 70
+            nvidia.com/gpu: 70
+          protectionThresholds:
+            cpu: 95
+            memory: 95
+            nvidia.com/gpu: 100
+          resourceType: cpu
+          cooldownTime: 30m
+          numberOfNodes: 1
+          labelSelector:
+            matchLabels:
+              app: volcano-app
+        name: Defragmentation
       plugins:
         balance:
           enabled:
           - LoadAware
+          - Defragmentation
 
 ---
 kind: ClusterRole

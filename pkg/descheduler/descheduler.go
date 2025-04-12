@@ -293,6 +293,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			}
 		}
 
+		// TODO: Should defragmentation plugin be added to PreEvictionFilter extension point?
+
 		loopStartDuration := time.Now()
 		defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
