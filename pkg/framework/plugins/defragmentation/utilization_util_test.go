@@ -69,7 +69,7 @@ func TestGetNodeResourceUtilizationPercentage(t *testing.T) {
 func TestGetNodeResourceUsage(t *testing.T) {
 	tests := []struct {
 		resourceName v1.ResourceName
-		expected     string // 期望的资源值，使用字符串以便转换
+		expected     string
 	}{
 		{v1.ResourceCPU, "300m"},
 		{v1.ResourceMemory, "600Mi"},
