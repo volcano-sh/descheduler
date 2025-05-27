@@ -42,9 +42,9 @@ data:
             exclude:
               - kube-system
           lowThresholds:
-            cpu: 30
-            memory: 30
-            nvidia.com/gpu: 30
+            cpu: 20
+            memory: 20
+            nvidia.com/gpu: 20
           fragmentThresholds:
             cpu: 70
             memory: 70
@@ -63,9 +63,8 @@ data:
       plugins:
         balance:
           enabled:
-          - LoadAware
           - Defragmentation
-
+          - LoadAware
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
@@ -83,7 +82,7 @@ rules:
     verbs: ["get", "watch", "list"]
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "watch", "list", "delete"]
+    verbs: ["get", "watch", "list", "delete", "patch"]
   - apiGroups: [""]
     resources: ["pods/eviction"]
     verbs: ["create"]
@@ -93,6 +92,9 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch.volcano.sh"]
+    resources: ["reservations"]
+    verbs: ["create", "get", "list", "watch", "update", "delete"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

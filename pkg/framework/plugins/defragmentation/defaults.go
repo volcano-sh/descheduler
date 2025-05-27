@@ -45,6 +45,9 @@ func SetDefaults_DefragmentationArgs(obj runtime.Object) {
 	if args.CooldownTime == "" {
 		args.CooldownTime = ""
 	}
+	if args.ReserveTimeout == "" {
+		args.ReserveTimeout = "10m"
+	}
 	if args.Duration == "" {
 		args.Duration = "2m"
 	}

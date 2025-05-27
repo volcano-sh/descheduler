@@ -33,12 +33,14 @@ import (
 	apiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/apiserver/pkg/server/mux"
+	"k8s.io/client-go/rest"
 	restclient "k8s.io/client-go/rest"
 	registry "k8s.io/component-base/logs/api/v1"
 	jsonLog "k8s.io/component-base/logs/json"
 	_ "k8s.io/component-base/logs/json/register"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog/v2"
+	vcclient "volcano.sh/apis/pkg/client/clientset/versioned"
 
 	"volcano.sh/descheduler/cmd/descheduler/app/options"
 	"volcano.sh/descheduler/pkg/descheduler"
@@ -63,7 +65,16 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				klog.ErrorS(err, "failed to apply secure server configuration")
 				return
 			}
+			config, err := rest.InClusterConfig()
+			if err != nil {
+				klog.Fatal(err)
+			}
+			vcClient, err := vcclient.NewForConfig(config)
+			if err != nil {
+				klog.Fatal(err)
+			}
 
+			s.VcClient = vcClient
 			var factory registry.LogFormatFactory
 			if s.Logging.Format == "json" {
 				factory = jsonLog.Factory{}

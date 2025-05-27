@@ -38,7 +38,7 @@ func fakeNode(name string, allocatable v1.ResourceList) *v1.Node {
 	}
 }
 
-func fakeNodeInfo() NodeInfo {
+func fakeNodeInfo() *NodeInfo {
 	request := v1.ResourceList{
 		v1.ResourceCPU:    resource.MustParse("50m"),
 		v1.ResourceMemory: resource.MustParse("100Mi"),
@@ -49,7 +49,7 @@ func fakeNodeInfo() NodeInfo {
 		v1.ResourceMemory: resource.MustParse("200Mi"),
 		extendedResource:  resource.MustParse("4"),
 	}
-	return NodeInfo{
+	return &NodeInfo{
 		node:                    fakeNode("node1", allocatable),
 		resourceName:            v1.ResourceCPU,
 		resourceUsage:           resource.MustParse("50m"),
@@ -60,7 +60,7 @@ func fakeNodeInfo() NodeInfo {
 
 func TestGetNodeResourceUtilizationPercentage(t *testing.T) {
 	nodeInfo := fakeNodeInfo()
-	usagePercentage := getNodeResourceUtilizationPercentage(nodeInfo, v1.ResourceCPU)
+	usagePercentage := getNodeResourceUtilizationPercentage(*nodeInfo, v1.ResourceCPU)
 	if usagePercentage != 50 {
 		t.Errorf("Incorrect percentange computation, expected %v, got math.Floor(%v) instead", 50, usagePercentage)
 	}
@@ -108,7 +108,7 @@ func TestDefragmentationTime(t *testing.T) {
 }
 
 func TestClassifyNodes(t *testing.T) {
-	nodeInfos := []NodeInfo{fakeNodeInfo()}
+	nodeInfos := []*NodeInfo{fakeNodeInfo()}
 	sourceNodes, targetNodes := classifyNodes(nodeInfos, func(nodeInfo NodeInfo) bool { return true }, func(nodeInfo NodeInfo) bool { return false })
 	if len(sourceNodes) != 1 {
 		t.Errorf("Expected 1 source nodes, but got %d", len(sourceNodes))
@@ -119,7 +119,7 @@ func TestClassifyNodes(t *testing.T) {
 }
 
 func TestSortedNodesByUtilization(t *testing.T) {
-	nodeInfos := []NodeInfo{
+	nodeInfos := []*NodeInfo{
 		fakeNodeInfo(), fakeNodeInfo(),
 	}
 	nodeInfos[0].resourceUsage = resource.MustParse("100m")
@@ -132,5 +132,51 @@ func TestSortedNodesByUtilization(t *testing.T) {
 	sortedNodesByUtilization(nodeInfos, false)
 	if nodeInfos[0].resourceUsage.Cmp(nodeInfos[1].resourceUsage) != 1 {
 		t.Errorf("Expected nodes to be sorted in descending order")
+	}
+}
+
+func TestSortedPods(t *testing.T) {
+	pod1 := fakePod(v1.ResourceList{
+		v1.ResourceCPU:    resource.MustParse("200m"),
+		v1.ResourceMemory: resource.MustParse("100Mi"),
+	})
+	pod2 := fakePod(v1.ResourceList{
+		v1.ResourceCPU:    resource.MustParse("100m"),
+		v1.ResourceMemory: resource.MustParse("200Mi"),
+	})
+	pod3 := fakePod(v1.ResourceList{
+		v1.ResourceCPU:    resource.MustParse("300m"),
+		v1.ResourceMemory: resource.MustParse("50Mi"),
+	})
+	tests := []struct {
+		name         string
+		pods         []*v1.Pod
+		resourceName v1.ResourceName
+		expected     []*v1.Pod
+	}{
+		{
+			name:         "Sort by CPU",
+			pods:         []*v1.Pod{pod1, pod2, pod3},
+			resourceName: v1.ResourceCPU,
+			expected:     []*v1.Pod{pod3, pod1, pod2},
+		},
+		{
+			name:         "Sort by Memory",
+			pods:         []*v1.Pod{pod1, pod2, pod3},
+			resourceName: v1.ResourceMemory,
+			expected:     []*v1.Pod{pod2, pod1, pod3},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			sortedPods := sorted(test.pods, test.resourceName)
+
+			for i, pod := range sortedPods {
+				if pod != test.expected[i] {
+					t.Errorf("Test %s failed: expected pod at index %d to be %v, but got %v", test.name, i, test.expected[i], pod)
+				}
+			}
+		})
 	}
 }

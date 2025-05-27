@@ -31,6 +31,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	componentbaseconfig "k8s.io/component-base/config"
 	componentbaseoptions "k8s.io/component-base/config/options"
+	vcclient "volcano.sh/apis/pkg/client/clientset/versioned"
 
 	"volcano.sh/descheduler/pkg/apis/componentconfig"
 )
@@ -45,6 +46,7 @@ type DeschedulerServer struct {
 
 	Client         clientset.Interface
 	EventClient    clientset.Interface
+	VcClient       vcclient.Interface
 	SecureServing  *apiserveroptions.SecureServingOptionsWithLoopback
 	DisableMetrics bool
 }

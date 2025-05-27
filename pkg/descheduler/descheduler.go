@@ -38,6 +38,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
@@ -58,6 +59,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/pkg/version"
+	batch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
+	"volcano.sh/apis/pkg/client/clientset/versioned/scheme"
 
 	"volcano.sh/descheduler/cmd/descheduler/app/options"
 	"volcano.sh/descheduler/pkg/framework/plugins/loadaware"
@@ -68,6 +71,11 @@ const podNameEnvKey string = "HOSTNAME"
 const podNamespaceEnvKey string = "POD_NAMESPACE"
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
+	schemeBuilder := runtime.SchemeBuilder{
+		v1.AddToScheme,
+		batch.AddToScheme,
+	}
+	utilruntime.Must(schemeBuilder.AddToScheme(scheme.Scheme))
 	metrics.Register()
 
 	clientConnection := rs.ClientConnection
@@ -360,6 +368,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 				profile,
 				pluginregistry.PluginRegistry,
 				frameworkprofile.WithClientSet(client),
+				frameworkprofile.WithVcClient(rs.VcClient),
 				frameworkprofile.WithSharedInformerFactory(cycleSharedInformerFactory),
 				frameworkprofile.WithPodEvictor(podEvictor),
 				frameworkprofile.WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),

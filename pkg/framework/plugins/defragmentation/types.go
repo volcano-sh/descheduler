@@ -33,6 +33,7 @@ type DefragmentationArgs struct {
 	LowThresholds        api.ResourceThresholds `json:"lowThresholds"`
 	NumberOfNodes        int                    `json:"numberOfNodes"`
 	CooldownTime         string                 `json:"cooldownTime"`
+	ReserveTimeout       string                 `json:"ReserveTimeout"`
 
 	//DefaultEvitorArgs
 	NodeSelector            string                 `json:"nodeSelector"`
