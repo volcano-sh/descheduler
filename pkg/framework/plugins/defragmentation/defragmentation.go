@@ -32,7 +32,7 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
-	batch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
+	scheduling "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 	vcclient "volcano.sh/apis/pkg/client/clientset/versioned"
 
 	"volcano.sh/descheduler/pkg/framework/profile"
@@ -248,7 +248,7 @@ func (d *Defragmentation) doMigratePod(pod *v1.Pod, sourceNode, targetNode *Node
 	allocateResourceToNode(targetNode, podRequests)
 
 	reservation := generateReservation(pod, targetNode)
-	createdReservation, err := d.vcClient.BatchV1alpha1().Reservations(pod.Namespace).Create(context.TODO(), reservation, metav1.CreateOptions{})
+	createdReservation, err := d.vcClient.SchedulingV1beta1().Reservations(pod.Namespace).Create(context.TODO(), reservation, metav1.CreateOptions{})
 	if err != nil {
 		klog.Warningf("Failed to create reservation for Pod %s/%s: %v", pod.Namespace, pod.Name, err)
 		releaseResourceFromNode(targetNode, podRequests)
@@ -259,7 +259,7 @@ func (d *Defragmentation) doMigratePod(pod *v1.Pod, sourceNode, targetNode *Node
 
 	if !d.waitForReservationAvailable(createdReservation, migrateTimeout) {
 		klog.Warningf("Reservation %s for Pod %s/%s timed out", createdReservation.Name, pod.Namespace, pod.Name)
-		_ = d.vcClient.BatchV1alpha1().Reservations(pod.Namespace).Delete(context.TODO(), createdReservation.Name, metav1.DeleteOptions{})
+		_ = d.vcClient.SchedulingV1beta1().Reservations(pod.Namespace).Delete(context.TODO(), createdReservation.Name, metav1.DeleteOptions{})
 		releaseResourceFromNode(targetNode, podRequests)
 		return
 	}
@@ -270,7 +270,7 @@ func (d *Defragmentation) doMigratePod(pod *v1.Pod, sourceNode, targetNode *Node
 
 	if !d.handle.Evictor().Evict(context.TODO(), pod, evictOptions) {
 		klog.Errorf("Failed to evict Pod %s/%s from source node", pod.Namespace, pod.Name)
-		_ = d.vcClient.BatchV1alpha1().Reservations(pod.Namespace).Delete(context.TODO(), createdReservation.Name, metav1.DeleteOptions{})
+		_ = d.vcClient.SchedulingV1beta1().Reservations(pod.Namespace).Delete(context.TODO(), createdReservation.Name, metav1.DeleteOptions{})
 		releaseResourceFromNode(targetNode, podRequests)
 		return
 	}
@@ -278,7 +278,7 @@ func (d *Defragmentation) doMigratePod(pod *v1.Pod, sourceNode, targetNode *Node
 	klog.Infof("Successfully evicted Pod %s/%s", pod.Namespace, pod.Name)
 }
 
-func (d *Defragmentation) waitForReservationAvailable(reservation *batch.Reservation, timeout time.Duration) bool {
+func (d *Defragmentation) waitForReservationAvailable(reservation *scheduling.Reservation, timeout time.Duration) bool {
 	deadline := time.After(timeout)
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -288,12 +288,12 @@ func (d *Defragmentation) waitForReservationAvailable(reservation *batch.Reserva
 		case <-deadline:
 			return false
 		case <-ticker.C:
-			updated, err := d.vcClient.BatchV1alpha1().Reservations(reservation.Namespace).Get(context.TODO(), reservation.Name, metav1.GetOptions{})
+			updated, err := d.vcClient.SchedulingV1beta1().Reservations(reservation.Namespace).Get(context.TODO(), reservation.Name, metav1.GetOptions{})
 			if err != nil {
 				klog.Errorf("Error fetching reservation %s: %v", reservation.Name, err)
 				continue
 			}
-			if updated.Status.State.Phase == batch.ReservationAvailable {
+			if updated.Status.State.Phase == scheduling.ReservationAvailable {
 				klog.Infof("Reservation %s is now available", reservation.Name)
 				return true
 			}

@@ -92,7 +92,7 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["batch.volcano.sh"]
+  - apiGroups: ["scheduling.incubator.k8s.io", "scheduling.volcano.sh"]
     resources: ["reservations"]
     verbs: ["create", "get", "list", "watch", "update", "delete"]
 

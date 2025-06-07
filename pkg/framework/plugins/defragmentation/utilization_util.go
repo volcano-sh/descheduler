@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	batch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
+	scheduling "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
 
 const (
@@ -238,20 +239,20 @@ func checkResourceAvailability(pod *v1.Pod, node NodeInfo) bool {
 }
 
 // generateReservation Create a reservation object based on the pod's specifications
-func generateReservation(pod *v1.Pod, targetNode *NodeInfo) *batch.Reservation {
+func generateReservation(pod *v1.Pod, targetNode *NodeInfo) *scheduling.Reservation {
 	podSpec := pod.Spec.DeepCopy()
 	// important: clear the NodeName
 	podSpec.NodeName = ""
-	reservation := &batch.Reservation{
+	reservation := &scheduling.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      generateReservationName(pod),
 			Namespace: pod.Namespace,
 		},
-		Spec: batch.ReservationSpec{
+		Spec: scheduling.ReservationSpec{
 			SchedulerName: pod.Spec.SchedulerName,
 			MinAvailable:  1,
 			Queue:         DefaultQueue,
-			Owners: []batch.ReservationOwner{
+			Owners: []scheduling.ReservationOwner{
 				{
 					Object: &v1.ObjectReference{
 						Kind:      "Pod",

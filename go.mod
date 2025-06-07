@@ -19,7 +19,7 @@ require (
 	k8s.io/metrics v0.27.1
 	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
 	sigs.k8s.io/descheduler v0.27.1
-	volcano.sh/apis v0.0.0-00010101000000-000000000000
+	volcano.sh/apis v0.0.0
 )
 
 require (
@@ -104,4 +104,4 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace volcano.sh/apis => github.com/LegGasai/apis v0.0.0-20250525115823-ccbf905b161d
+replace volcano.sh/apis => github.com/LegGasai/apis v0.0.0-20250607075624-623f97c3da19
