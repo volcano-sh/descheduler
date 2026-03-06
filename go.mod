@@ -104,4 +104,4 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace volcano.sh/apis => github.com/LegGasai/apis v0.0.0-20250607075624-623f97c3da19
+replace volcano.sh/apis => github.com/LegGasai/apis v0.0.0-20250608025211-f68ef56e19bb

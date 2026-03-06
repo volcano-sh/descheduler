@@ -239,8 +239,13 @@ func checkResourceAvailability(pod *v1.Pod, node NodeInfo) bool {
 }
 
 // generateReservation Create a reservation object based on the pod's specifications
-func generateReservation(pod *v1.Pod, targetNode *NodeInfo) *scheduling.Reservation {
+func generateReservation(pod *v1.Pod, targetNodes []*NodeInfo) *scheduling.Reservation {
 	podSpec := pod.Spec.DeepCopy()
+
+	var reservationNodeNames []string
+	for _, node := range targetNodes {
+		reservationNodeNames = append(reservationNodeNames, node.node.Name)
+	}
 	// important: clear the NodeName
 	podSpec.NodeName = ""
 	reservation := &scheduling.Reservation{
@@ -270,7 +275,7 @@ func generateReservation(pod *v1.Pod, targetNode *NodeInfo) *scheduling.Reservat
 						ObjectMeta: pod.ObjectMeta,
 						Spec:       *podSpec,
 					},
-					ReservationNodeName: targetNode.node.Name,
+					ReservationNodeNames: reservationNodeNames,
 				},
 			},
 			TTL: &metav1.Duration{Duration: time.Hour},

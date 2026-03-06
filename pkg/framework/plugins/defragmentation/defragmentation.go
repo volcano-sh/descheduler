@@ -19,6 +19,7 @@ package defragmentation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -202,7 +203,7 @@ func (d *Defragmentation) Balance(ctx context.Context, nodes []*v1.Node) *framew
 }
 
 func (d *Defragmentation) migratePod(pod *v1.Pod, sourceNode *NodeInfo, targetNodes []*NodeInfo, migrateTimeout time.Duration) {
-	var targetNode *NodeInfo
+	var availableTargetNodes []*NodeInfo
 	for _, node := range targetNodes {
 		klog.V(4).Infof("Considering target node %s for Pod %s/%s", node.node.Name, pod.Namespace, pod.Name)
 		// 1. check taints
@@ -217,19 +218,19 @@ func (d *Defragmentation) migratePod(pod *v1.Pod, sourceNode *NodeInfo, targetNo
 			continue
 		}
 
-		targetNode = node
-		break
+		availableTargetNodes = append(availableTargetNodes, node)
 	}
 
-	if targetNode == nil {
-		klog.Warningf("No suitable target node found for migrating Pod %s/%s from soruce node %s", pod.Namespace, pod.Name, sourceNode.node.Name)
+	if len(availableTargetNodes) == 0 {
+		klog.Warningf("No suitable target node found for migrating Pod %s/%s from source node %s", pod.Namespace, pod.Name, sourceNode.node.Name)
 		return
 	}
 
-	go d.doMigratePod(pod, sourceNode, targetNode, migrateTimeout)
+	sortedNodesByUtilization(availableTargetNodes, false)
+	go d.doMigratePod(pod, sourceNode, availableTargetNodes, migrateTimeout)
 }
 
-func (d *Defragmentation) doMigratePod(pod *v1.Pod, sourceNode, targetNode *NodeInfo, migrateTimeout time.Duration) {
+func (d *Defragmentation) doMigratePod(pod *v1.Pod, sourceNode *NodeInfo, targetNodes []*NodeInfo, migrateTimeout time.Duration) {
 	podKey := generateKeyFromPod(pod)
 	if _, exists := d.migratingPods.LoadOrStore(podKey, struct{}{}); exists {
 		klog.Infof("Pod %s is already migrating, skip", podKey)
@@ -237,21 +238,21 @@ func (d *Defragmentation) doMigratePod(pod *v1.Pod, sourceNode, targetNode *Node
 	}
 	defer d.migratingPods.Delete(podKey)
 
-	klog.Infof("Starting migration of Pod %s/%s from %s to %s",
-		pod.Namespace, pod.Name, sourceNode.node.Name, targetNode.node.Name)
-
-	if !checkResourceAvailability(pod, *targetNode) {
-		klog.Warningf("Insufficient resources on target node %s for Pod %s/%s", targetNode.node.Name, pod.Namespace, pod.Name)
-		return
+	var targetNodeNames []string
+	for _, tn := range targetNodes {
+		targetNodeNames = append(targetNodeNames, tn.node.Name)
 	}
-	podRequests := getPodAllResourceRequest(pod)
-	allocateResourceToNode(targetNode, podRequests)
+	klog.Infof("Starting migration of Pod %s/%s from %s to candidate nodes [%s]",
+		pod.Namespace, pod.Name, sourceNode.node.Name, strings.Join(targetNodeNames, ", "))
 
-	reservation := generateReservation(pod, targetNode)
+	podRequests := getPodAllResourceRequest(pod)
+	allocateResourceToNode(targetNodes[0], podRequests)
+
+	reservation := generateReservation(pod, targetNodes)
 	createdReservation, err := d.vcClient.SchedulingV1beta1().Reservations(pod.Namespace).Create(context.TODO(), reservation, metav1.CreateOptions{})
 	if err != nil {
 		klog.Warningf("Failed to create reservation for Pod %s/%s: %v", pod.Namespace, pod.Name, err)
-		releaseResourceFromNode(targetNode, podRequests)
+		releaseResourceFromNode(targetNodes[0], podRequests)
 		return
 	}
 
@@ -260,18 +261,18 @@ func (d *Defragmentation) doMigratePod(pod *v1.Pod, sourceNode, targetNode *Node
 	if !d.waitForReservationAvailable(createdReservation, migrateTimeout) {
 		klog.Warningf("Reservation %s for Pod %s/%s timed out", createdReservation.Name, pod.Namespace, pod.Name)
 		_ = d.vcClient.SchedulingV1beta1().Reservations(pod.Namespace).Delete(context.TODO(), createdReservation.Name, metav1.DeleteOptions{})
-		releaseResourceFromNode(targetNode, podRequests)
+		releaseResourceFromNode(targetNodes[0], podRequests)
 		return
 	}
 
 	evictOptions := evictions.EvictOptions{
-		Reason: fmt.Sprintf("Migrating Pod %s/%s from node %s to node %s", pod.Namespace, pod.Name, sourceNode.node.Name, targetNode.node.Name),
+		Reason: fmt.Sprintf("Migrating Pod %s/%s from node %s to candidate nodes [%s]", pod.Namespace, pod.Name, sourceNode.node.Name, strings.Join(targetNodeNames, ", ")),
 	}
 
 	if !d.handle.Evictor().Evict(context.TODO(), pod, evictOptions) {
 		klog.Errorf("Failed to evict Pod %s/%s from source node", pod.Namespace, pod.Name)
 		_ = d.vcClient.SchedulingV1beta1().Reservations(pod.Namespace).Delete(context.TODO(), createdReservation.Name, metav1.DeleteOptions{})
-		releaseResourceFromNode(targetNode, podRequests)
+		releaseResourceFromNode(targetNodes[0], podRequests)
 		return
 	}
 

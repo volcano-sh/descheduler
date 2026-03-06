@@ -1,7 +1,7 @@
 cel.dev/expr v0.18.0 h1:CJ6drgk+Hf96lkLikr4rFf19WrU0BOWEihyZnI2TAzo=
 cel.dev/expr v0.18.0/go.mod h1:MrpN08Q+lEBs+bGYdLxxHkZoUSsCp0nSKTs0nTymJgw=
-github.com/LegGasai/apis v0.0.0-20250607075624-623f97c3da19 h1:XiCao/TUyWhc6Wa8h3fnkN2C+tSRjxRXd7NQceTvEx8=
-github.com/LegGasai/apis v0.0.0-20250607075624-623f97c3da19/go.mod h1:0XNNnIOevJSYNiXRmwhXUrYCcCcWcBeTY0nxrlkk03A=
+github.com/LegGasai/apis v0.0.0-20250608025211-f68ef56e19bb h1:cOXexFLVkKIRWZ9srnD6KU/UEIPLjQip8UvWkOC8i8k=
+github.com/LegGasai/apis v0.0.0-20250608025211-f68ef56e19bb/go.mod h1:0XNNnIOevJSYNiXRmwhXUrYCcCcWcBeTY0nxrlkk03A=
 github.com/NYTimes/gziphandler v1.1.1 h1:ZUDjpQae29j0ryrS0u/B8HZfJBtBQHjqw2rQ2cqUQ3I=
 github.com/NYTimes/gziphandler v1.1.1/go.mod h1:n/CVRwUEOgIxrgPvAQhUUr9oeUtvrhMomdKFjzJNB0c=
 github.com/antlr4-go/antlr/v4 v4.13.0 h1:lxCg3LAv+EUK6t1i0y1V6/SLeUi0eKEKdhQAlS8TVTI=
