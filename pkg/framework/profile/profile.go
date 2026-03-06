@@ -29,6 +29,7 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
+	vcclient "volcano.sh/apis/pkg/client/clientset/versioned"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/errors"
@@ -73,6 +74,7 @@ func (ei *evictorImpl) NodeLimitExceeded(node *v1.Node) bool {
 // handleImpl implements the framework handle which gets passed to plugins
 type handleImpl struct {
 	clientSet                 clientset.Interface
+	vcClient                  vcclient.Interface
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	sharedInformerFactory     informers.SharedInformerFactory
 	evictor                   *evictorImpl
@@ -83,6 +85,10 @@ var _ frameworktypes.Handle = &handleImpl{}
 // ClientSet retrieves kube client set
 func (hi *handleImpl) ClientSet() clientset.Interface {
 	return hi.clientSet
+}
+
+func (hi *handleImpl) VcClient() vcclient.Interface {
+	return hi.vcClient
 }
 
 // GetPodsAssignedToNodeFunc retrieves GetPodsAssignedToNodeFunc implementation
@@ -136,15 +142,28 @@ type Option func(*handleImplOpts)
 
 type handleImplOpts struct {
 	clientSet                 clientset.Interface
+	vcClient                  vcclient.Interface
 	sharedInformerFactory     informers.SharedInformerFactory
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	podEvictor                *evictions.PodEvictor
+}
+
+type VcHandle interface {
+	frameworktypes.Handle
+	VcClient() vcclient.Interface
 }
 
 // WithClientSet sets clientSet for the scheduling frameworkImpl.
 func WithClientSet(clientSet clientset.Interface) Option {
 	return func(o *handleImplOpts) {
 		o.clientSet = clientSet
+	}
+}
+
+// WithVcClient sets VcClient for the scheduling frameworkImpl.
+func WithVcClient(vcClient vcclient.Interface) Option {
+	return func(o *handleImplOpts) {
+		o.vcClient = vcClient
 	}
 }
 
@@ -225,6 +244,10 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		return nil, fmt.Errorf("clientSet missing")
 	}
 
+	if hOpts.vcClient == nil {
+		return nil, fmt.Errorf("vcClient missing")
+	}
+
 	if hOpts.sharedInformerFactory == nil {
 		return nil, fmt.Errorf("sharedInformerFactory missing")
 	}
@@ -262,6 +285,7 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		evictor: &evictorImpl{
 			podEvictor: hOpts.podEvictor,
 		},
+		vcClient: hOpts.vcClient,
 	}
 
 	pluginNames := append(config.Plugins.Deschedule.Enabled, config.Plugins.Balance.Enabled...)
